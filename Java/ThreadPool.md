@@ -53,3 +53,12 @@ Java 创建线程池有 2 种方法，一是使用 Executors 工厂类创建提�
 | CallerRunsPolicy    | 重试提交当前的任务，即再次调用运行该任务的execute()方法。 |
 | DiscardOldestPolicy | 抛弃队列头部（最旧）的一个任务，并执行当前任务。          |
 | DiscardPolicy       | 抛弃当前任务。                                            |
+
+
+### 建议使用 ThreadPoolExecutor 来创建线程池
+> 阿里 Java 开发规范强制不允许 Executors 创建线程池 
+
+【强制】线程池不允许使用Executors去创建，而是通过ThreadPoolExecutor的方式，这样的处理方式让写的同学更加明确线程池的运行规则，规避资源耗尽的风险。
+Executors返回的线程池对象的弊端如下:
+FixedThreadPool和SingleThreadPool：允许的请求队列长度为Integer.MAX_VALUE，可能会堆积大量的请求，从而导致OOM。
+CachedThreadPool和ScheduledThreadPool：允许的创建线程数量为Integer.MAX_VALUE，可能会创建大量的线程，从而导致OOM。
