@@ -35,4 +35,4 @@ int pid = clone(main_function, stack_size, CLONE_NEWPID | SIGCHLD, NULL);
 
 ### 容器
 
-在 MacOS 和 windows 上跑 Linux 容器实际上是用到了虚拟化的技术，在宿主机上跑了个 Linux 虚拟机，再在虚拟机中跑 docker engine。
+在 MacOS 和 windows 上跑 Linux 容器实际上是用到了虚拟化的技术，docker engine在宿主机上跑了个 Linux 虚拟机，再在虚拟机中跑 docker engine。
