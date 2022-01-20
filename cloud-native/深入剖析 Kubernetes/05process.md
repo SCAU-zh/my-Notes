@@ -34,5 +34,5 @@ int pid = clone(main_function, stack_size, CLONE_NEWPID | SIGCHLD, NULL);
 所以说，**容器实际上是特殊的进程**。
 
 ### 容器
-
+![avatar](https://notes-1303113205.cos.ap-guangzhou.myqcloud.com/my-notes-image/d1bb34cda8744514ba4c233435bf4e96.webp)
 在 MacOS 和 windows 上跑 Linux 容器实际上是用到了虚拟化的技术，docker engine在宿主机上跑了个 Linux 虚拟机，再在虚拟机中跑 docker engine。
