@@ -1,4 +1,4 @@
-## Java Lambda 表达式使用例子
+## Java stream 表达式使用例子
 
 ### 1、List 映射为 map
 ```java
