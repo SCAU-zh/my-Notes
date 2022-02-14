@@ -1,5 +1,5 @@
-## 工作日常踩坑
-### left join 右表筛选条件后移导致的筛选错误
+# 工作日常踩坑
+## left join 右表筛选条件后移导致的筛选错误
 表 A:客户信息主表
 
 |id|deleted_at|
@@ -28,3 +28,30 @@ select a.id,b.name from a left join b on a.id = b.a_id and b.deleted_at = '1970-
 ```
 
 在联表时就对删除信息进行筛选。
+
+
+## 分页排序列包含相同数据导致数据返回错误
+### 问题场景
+一条分页查询 sql 语句中，有同一条数据出现在相隔的两页中。
+```sql
+select rl from #{#entityName} rl where rl.xxx=xxx order by rl.createdAt desc limit 0,1
+```
+
+### 原因分析
+查询语句以create_time进行倒序排序，通过limit进行分页，在正常情况下不会出现问题。
+
+但当业务并发量比较大，导致create_time存在大量相同值时，再基于limit进行分页，就会出现乱序问题。
+
+查看了Mysql 5.7和8.0的官方文档，描述如下：
+
+If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
+
+上述内容概述：在使用ORDER BY对列进行排序时，如果对应(ORDER BY的列)列存在多行相同数据，(Mysql)服务器会按照任意顺序返回这些行，并且可能会根据整体执行计划以不同的方式返回。
+
+简单来说就是：ORDER BY查询的数据，如果ORDER BY列存在多行相同数据，Mysql会随机返回。这就会导致虽然使用了排序，但也会发生乱序的状况。
+
+### 解决方案
+可增加筛选条件
+```sql
+select rl from #{#entityName} rl where rl.xxx=xxx order by rl.createdAt,rl.id desc limit 0,1
+```
