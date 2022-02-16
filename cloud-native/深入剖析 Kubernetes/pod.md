@@ -98,3 +98,174 @@ Pod 对象的生命周期主要体现在 Pod API 对象的 Status 部分，其�
 - ContainersReady：Pod 中所有容器都已就绪；
 - Initialized：所有的 Init 容器 都已成功启动；
 - Ready：Pod 可以为请求提供服务，并且应该被添加到对应服务的负载均衡池中。
+
+## kubernetes 的几种 project(投射) volume
+> 在 Kubernetes 中，有几种特殊的 Volume，它们存在的意义不是为了存放容器里的数据，也不是用来进行容器和宿主机之间的数据交换。
+> 
+> 这些特殊 Volume 的作用，是为容器提供预先定义好的数据。
+> 
+> 所以，从容器的角度来看，这些 Volume 里的信息就是仿佛是被 Kubernetes“投射”（Project）进入容器当中的。
+> 
+> 这正是 Projected Volume 的含义
+
+### 1、Secret
+secret 的作用是把 Pod 需要访问到的加密数据，存放到 etcd 中，这样子就可以通过 Pod 容器里挂载 Volume 的方式，访问到保存的信息。
+
+下面给出使用例子
+
+使用 Secret 对象的Pod：
+```yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: test-secret-pod
+spec: 
+  containers: 
+    - name: test-secret-pod
+      image: busybox
+      args: 
+        - sleep
+        - "86400"
+      volumeMounts: 
+        - name: mysql-cred
+          mountPath: "/mysql-cred"
+          readOnly: true
+  # 声明挂载了类型为 projected 的 volume，来源为 secret
+  volumeMounts: 
+    - name: mysql-cred
+      projected: 
+        sources: 
+          - secret: 
+              name: user
+          - secret: 
+              name: password
+```
+
+创建 secret 对象(命令创建和 yaml 文件)：
+``` shell
+$ cat ./username.txt
+admin
+$ cat ./password.txt
+c1oudc0w!
+
+$ kubectl create secret generic user --from-file=./username.txt
+$ kubectl create secret generic pass --from-file=./password.txt
+
+$ kubectl get secrets
+NAME           TYPE                                DATA      AGE
+user          Opaque                                1         51s
+pass          Opaque                                1         51s
+```
+```yaml
+apiVersion: v1
+kind: Secret
+metadata: 
+  name: mysecret
+type: Opaque
+data: 
+  user: YWRtaW4=
+  password: MWYyZDFlMmU2N2Rm
+```
+
+通过这种方式 挂载进入容器的 Secret，会同步更新改动，因为 kubelet 组件在定时维护这些 Volume
+
+但这个更新可能有时延，所以在编写链接数据库的逻辑时，要主要加上重试和超时的逻辑
+
+### 2、configMap
+ConfigMap 与 Secret 类似，区别是 ConfigMap 用于存储不需要加密的，应用所需的配置信息。
+
+例子：
+```yaml
+appVersion: v1
+kind: ConfigMap
+data:
+  ui.properties: | 
+    color.good=purple 
+    color.bad=yellow 
+    allow.textmode=true 
+    how.nice.to.look=fairlyNice
+metadata: 
+  name: ui-config
+.......
+```
+```shell
+
+# .properties文件的内容
+$ cat example/ui.properties
+color.good=purple
+color.bad=yellow
+allow.textmode=true
+how.nice.to.look=fairlyNice
+
+# 从.properties文件创建ConfigMap
+$ kubectl create configmap ui-config --from-file=example/ui.properties
+```
+> 备注：kubectl get -o yaml 这样的参数，会将指定的 Pod API 对象以 YAML 的方式展示出来。
+
+### 3、downwardAPI
+作用是让 Pod 中的容器可以访问到 Pod Api 对象本身的信息。
+```yaml
+apiVersion: v1
+kind: Pod
+metadata: 
+  name: test-downwardapi-volume
+  labels: 
+    zone: us-est-coast 
+    cluster: test-cluster1 
+    rack: rack-22
+spec: 
+  containers: 
+    - name: client-container
+      image: busybox
+      command: ["sh", "-c"]
+      args: 
+        - while true; do
+            if [[ -e /etc/podinfo/labels ]]; then
+              echo -en '\n\n'; cat /etc/podinfo/labels; fi;
+            sleep 5;
+          done;
+      volumeMounts: 
+        - name: podinfo
+          mountPath: /etc/podinfo
+          readOnly: false
+  volumes: 
+    - name: podinfo
+      projected: 
+        sources: 
+          - downwardAPI: 
+            items: 
+              - path: "labels"
+                fieldRef: 
+                  fieldPath: metadata.labels
+```
+通过上面例子的方式，当前 Pod 的 Labels 的值，就会被 kubernetes 自动挂载到成为容器的 /etc/podinfo/labels 文件
+
+Downward API 能够获取到的信息，一定是 Pod 里的容器进程启动之前就能够确定下来的信息
+
+Downward API 支持的部分字段
+```yaml
+1. 使用fieldRef可以声明使用:
+  spec.nodeName - 宿主机名字
+  status.hostIP - 宿主机IP
+  metadata.name - Pod的名字
+  metadata.namespace - Pod的Namespace
+  status.podIP - Pod的IP
+  spec.serviceAccountName - Pod的Service Account的名字
+  metadata.uid - Pod的UID
+  metadata.labels['<KEY>'] - 指定<KEY>的Label值
+  metadata.annotations['<KEY>'] - 指定<KEY>的Annotation值
+  metadata.labels - Pod的所有Label
+  metadata.annotations - Pod的所有Annotation
+
+2. 使用resourceFieldRef可以声明使用:
+  容器的CPU limit
+  容器的CPU request
+  容器的memory limit
+  容器的memory request
+```
+
+### 4、ServiceAccountToken（一种特殊的 Secret）
+使用场景： 从pod里面调用k8s API来控制集群，需要使用 serviceAccountToken 保存的授权信息，才可以合法地访问 API Service
+
+##
+
